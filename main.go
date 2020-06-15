@@ -73,8 +73,3 @@ func Start(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 	_, err := bot.Send(msg)
 	return err
 }
-
-func Watermark(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
-	//TODO: implement
-	return nil
-}
