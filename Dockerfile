@@ -10,6 +10,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflag
 FROM scratch
 COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/no/no /app/
-COPY marks/box.png /app/marks/box.png
+COPY marks/ /app/marks
 WORKDIR /app
 ENTRYPOINT ["./no"]

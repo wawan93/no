@@ -13,8 +13,10 @@ import (
 	"os"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/google/uuid"
+	"github.com/nfnt/resize"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	tgbot "github.com/wawan93/bot-framework"
 )
 
@@ -87,8 +89,13 @@ func generate(background, watermark io.Reader) (io.Reader, error) {
 		return nil, fmt.Errorf("failed to decode: %s", err)
 	}
 
-	offset := image.Pt(0, 0)
 	b := first.Bounds()
+
+	mark = resizeMark(mark, b)
+
+	offsetY := b.Dy() - mark.Bounds().Dy()
+	offset := image.Pt(0, offsetY)
+
 	image3 := image.NewRGBA(b)
 	draw.Draw(image3, b, first, image.Point{}, draw.Src)
 	draw.Draw(image3, mark.Bounds().Add(offset), mark, image.Point{}, draw.Over)
@@ -97,6 +104,22 @@ func generate(background, watermark io.Reader) (io.Reader, error) {
 	jpeg.Encode(&buf, image3, &jpeg.Options{jpeg.DefaultQuality})
 
 	return &buf, nil
+}
+
+func resizeMark(img image.Image, b image.Rectangle) image.Image {
+	var w, h uint
+
+	if b.Dx() > b.Dy() {
+		h = uint(b.Dy() / 2)
+		w = h
+	}
+
+	if b.Dx() <= b.Dy() {
+		w = uint(b.Dx() / 2)
+		h = w
+	}
+
+	return resize.Resize(w, h, img, resize.Lanczos2)
 }
 
 func randomName() string {

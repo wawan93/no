@@ -44,20 +44,30 @@ func main() {
 
 func getUpdatesChannel(api *tgbotapi.BotAPI, webhookAddress string) tgbotapi.UpdatesChannel {
 	var updates tgbotapi.UpdatesChannel
-	if os.Getenv("APP_ENV") == "development" {
-		u := tgbotapi.NewUpdate(0)
-		u.Timeout = 60
-		updates, _ = api.GetUpdatesChan(u)
-	} else if os.Getenv("APP_ENV") == "production" {
+	if os.Getenv("APP_ENV") == "production" {
 		_, err := api.SetWebhook(tgbotapi.NewWebhook(
 			"https://" + webhookAddress + "/no",
 		))
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		updates = api.ListenForWebhook("/no")
+
 		go http.ListenAndServe("0.0.0.0:80", nil)
+
+		return updates
 	}
+
+	_, err := api.RemoveWebhook()
+	if err != nil {
+		log.Fatalf("can't remove webhook: %v", err)
+	}
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates, _ = api.GetUpdatesChan(u)
 	return updates
 }
 
