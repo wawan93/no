@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: no-bot
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: no-bot
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-bot
+spec:
+  selector:
+    matchLabels:
+      app: no-bot
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: no-bot
+    spec:
+      containers:
+        - image: wawan/no-bot
+          name: no-bot
+          env:
+            - name: APP_ENV
+              value: 'production'
+            - name: WEBHOOK_ADDRESS
+              value: "api.wawan.pro"
+            - name: TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: no-bot
+                  key: token
+          ports:
+            - containerPort: 80
