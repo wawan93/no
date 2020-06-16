@@ -25,8 +25,11 @@ func Watermark(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 	typingMsg := tgbotapi.NewChatAction(bot.GetChatID(update), tgbotapi.ChatTyping)
 	bot.Send(typingMsg)
 
+	photos := *update.Message.Photo
+	fileID := photos[len(photos)-1].FileID
+
 	// read sent photo
-	response, err := uploadedPhoto(bot, update)
+	response, err := uploadedPhoto(bot, fileID)
 	if err != nil {
 		return err
 	}
@@ -60,11 +63,7 @@ func Watermark(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 	return nil
 }
 
-func uploadedPhoto(bot *tgbot.BotFramework, update *tgbotapi.Update) (*http.Response, error) {
-	photos := *update.Message.Photo
-
-	fileID := photos[len(photos)-1].FileID
-
+func uploadedPhoto(bot *tgbot.BotFramework, fileID string) (*http.Response, error) {
 	url, err := bot.GetFileDirectURL(fileID)
 	if err != nil {
 		return nil, err

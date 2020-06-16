@@ -17,8 +17,6 @@ func main() {
 		log.Panic("WEBHOOK_ADDRESS is empty")
 	}
 
-	log.Printf("token=%v", token)
-
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err)
@@ -79,7 +77,46 @@ func Start(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		}
 		return nil
 	}
-	msg := tgbotapi.NewMessage(bot.GetChatID(update), "Отправьте картинку")
-	_, err := bot.Send(msg)
+
+	photosCfg := tgbotapi.NewUserProfilePhotos(int(bot.GetChatID(update)))
+
+	photos, err := bot.BotAPI.GetUserProfilePhotos(photosCfg)
+
+	if err != nil || photos.TotalCount == 0 {
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), "Отправьте картинку")
+		_, err := bot.Send(msg)
+		return err
+	}
+
+	mainPhotos := photos.Photos[0]
+
+	response, err := uploadedPhoto(bot, mainPhotos[len(mainPhotos)-1].FileID)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	// open watermark
+	mark, err := os.Open("marks/box.png")
+	if err != nil {
+		return err
+	}
+	defer mark.Close()
+
+	// generate new picture
+	buf, err := generate(response.Body, mark)
+	if err != nil {
+		return err
+	}
+
+	file := tgbotapi.FileReader{
+		Name:   randomName() + ".jpeg",
+		Reader: buf,
+		Size:   -1,
+	}
+
+	msg := tgbotapi.NewPhotoUpload(bot.GetChatID(update), file)
+
+	_, err = bot.Send(msg)
 	return err
 }
