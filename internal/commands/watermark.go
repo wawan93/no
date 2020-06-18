@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"bytes"
@@ -8,59 +8,71 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jinzhu/gorm"
 	"github.com/nfnt/resize"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	tgbot "github.com/wawan93/bot-framework"
+
+	"no/internal/models"
 )
 
-func Watermark(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
-	// show "...typing"
-	typingMsg := tgbotapi.NewChatAction(bot.GetChatID(update), tgbotapi.ChatTyping)
-	bot.Send(typingMsg)
+func Watermark(db *gorm.DB) tgbot.CommonHandler {
+	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		// show "...typing"
+		typingMsg := tgbotapi.NewChatAction(bot.GetChatID(update), tgbotapi.ChatTyping)
+		bot.Send(typingMsg)
 
-	photos := *update.Message.Photo
-	fileID := photos[len(photos)-1].FileID
+		photos := *update.Message.Photo
+		fileID := photos[len(photos)-1].FileID
 
-	// read sent photo
-	response, err := uploadedPhoto(bot, fileID)
-	if err != nil {
-		return err
+		// read sent photo
+		response, err := uploadedPhoto(bot, fileID)
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+
+		// open watermark
+		mark, err := os.Open("marks/box.png")
+		if err != nil {
+			return err
+		}
+		defer mark.Close()
+
+		// generate new picture
+		buf, err := generate(response.Body, mark)
+		if err != nil {
+			return err
+		}
+
+		file := tgbotapi.FileReader{
+			Name:   randomName() + ".jpeg",
+			Reader: buf,
+			Size:   -1,
+		}
+
+		msg := tgbotapi.NewPhotoUpload(bot.GetChatID(update), file)
+
+		if _, err := bot.Send(msg); err != nil {
+			return err
+		}
+
+		var user models.User
+		user.ChatID = bot.GetChatID(update)
+		if err := db.Where("chat_id=?", user.ChatID).FirstOrCreate(&user).Error; err != nil {
+			log.Printf("can't find user: %v", err)
+		}
+		user.Photos++
+		return db.Save(&user).Error
 	}
-	defer response.Body.Close()
-
-	// open watermark
-	mark, err := os.Open("marks/box.png")
-	if err != nil {
-		return err
-	}
-	defer mark.Close()
-
-	// generate new picture
-	buf, err := generate(response.Body, mark)
-	if err != nil {
-		return err
-	}
-
-	file := tgbotapi.FileReader{
-		Name:   randomName() + ".jpeg",
-		Reader: buf,
-		Size:   -1,
-	}
-
-	msg := tgbotapi.NewPhotoUpload(bot.GetChatID(update), file)
-
-	if _, err := bot.Send(msg); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func uploadedPhoto(bot *tgbot.BotFramework, fileID string) (*http.Response, error) {

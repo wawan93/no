@@ -36,5 +36,30 @@ spec:
                 secretKeyRef:
                   name: no-bot
                   key: token
+            - name: DBHOST
+              valueFrom:
+                secretKeyRef:
+                  name: no-bot
+                  key: dbhost
+            - name: DBPORT
+              valueFrom:
+                secretKeyRef:
+                  name: no-bot
+                  key: dbport
+            - name: DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: no-bot
+                  key: dbname
+            - name: DBUSER
+              valueFrom:
+                secretKeyRef:
+                  name: no-bot
+                  key: dbuser
+            - name: DBPASS
+              valueFrom:
+                secretKeyRef:
+                  name: no-bot
+                  key: dbpass
           ports:
             - containerPort: 80
