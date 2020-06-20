@@ -2,8 +2,10 @@ package main
 
 import (
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
@@ -11,9 +13,12 @@ import (
 
 	"no/internal/commands"
 	"no/internal/db"
+	"no/internal/repo"
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	db.Connect(
 		"mysql",
 		os.Getenv("DBHOST"),
@@ -42,16 +47,17 @@ func main() {
 
 	bot := tgbot.NewBotFramework(api)
 
-	updates := getUpdatesChannel(api, webhookAddress)
+	users := repo.NewUserRepo(db.Conn)
 
-	if err := bot.RegisterCommand("/start", commands.Start(db.Conn), 0); err != nil {
+	if err := bot.RegisterCommand("/start", commands.Start(users), 0); err != nil {
 		log.Fatalf("can't register command: %+v", err)
 	}
 
-	if err := bot.RegisterPhotoHandler(commands.Watermark(db.Conn), 0); err != nil {
+	if err := bot.RegisterPhotoHandler(commands.Watermark(users), 0); err != nil {
 		log.Fatalf("can't register handler: %+v", err)
 	}
 
+	updates := getUpdatesChannel(api, webhookAddress)
 	bot.HandleUpdates(updates)
 }
 

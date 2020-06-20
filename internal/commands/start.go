@@ -2,15 +2,16 @@ package commands
 
 import (
 	"log"
-	"no/internal/models"
-	"os"
+	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
-	"github.com/jinzhu/gorm"
 	tgbot "github.com/wawan93/bot-framework"
+
+	"no/internal/img"
+	"no/internal/repo"
 )
 
-func Start(db *gorm.DB) tgbot.CommonHandler {
+func Start(users *repo.UserRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		if !update.Message.Chat.IsPrivate() {
 			msg := tgbotapi.NewMessage(bot.GetChatID(update), "Бот работает только в личке")
@@ -20,11 +21,7 @@ func Start(db *gorm.DB) tgbot.CommonHandler {
 			return nil
 		}
 
-		var user models.User
-		user.ChatID = bot.GetChatID(update)
-		if err := db.Where("chat_id=?", user.ChatID).FirstOrCreate(&user).Error; err != nil {
-			return err
-		}
+		user, err := users.Get(bot.GetChatID(update))
 
 		photosCfg := tgbotapi.NewUserProfilePhotos(int(bot.GetChatID(update)))
 
@@ -38,27 +35,19 @@ func Start(db *gorm.DB) tgbot.CommonHandler {
 
 		mainPhotos := photos.Photos[0]
 
-		response, err := uploadedPhoto(bot, mainPhotos[len(mainPhotos)-1].FileID)
+		url, err := bot.GetFileDirectURL(mainPhotos[len(mainPhotos)-1].FileID)
 		if err != nil {
 			return err
 		}
-		defer response.Body.Close()
-
-		// open watermark
-		mark, err := os.Open("marks/box.png")
-		if err != nil {
-			return err
-		}
-		defer mark.Close()
 
 		// generate new picture
-		buf, err := generate(response.Body, mark)
+		buf, err := img.Generate(url)
 		if err != nil {
 			return err
 		}
 
 		file := tgbotapi.FileReader{
-			Name:   randomName() + ".jpeg",
+			Name:   strconv.Itoa(int(bot.GetChatID(update))) + ".jpeg",
 			Reader: buf,
 			Size:   -1,
 		}
@@ -69,9 +58,6 @@ func Start(db *gorm.DB) tgbot.CommonHandler {
 			return err
 		}
 
-		user.Photos++
-
-		err = db.Save(&user).Error
-		return err
+		return users.IncrementPhotos(user)
 	}
 }
