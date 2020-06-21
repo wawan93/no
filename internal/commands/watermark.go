@@ -52,7 +52,17 @@ func StartWatermark(users *repo.UserRepo) tgbot.CommonHandler {
 		}
 		users.IncrementPhotos(user)
 
-		msgSend := tgbotapi.NewMessage(bot.GetChatID(update), "Отправьте фото")
+		msgSend := tgbotapi.NewMessage(bot.GetChatID(update), "Отправьте ещё фото")
+
+		kb := tgbotapi.NewReplyKeyboard(
+			tgbotapi.NewKeyboardButtonRow(
+				tgbotapi.NewKeyboardButton("❌Отмена"),
+			),
+		)
+		kb.OneTimeKeyboard = true
+
+		msgSend.ReplyMarkup = kb
+
 		_, err = bot.Send(msgSend)
 		return err
 	}

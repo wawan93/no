@@ -8,16 +8,24 @@ import (
 	tgbot "github.com/wawan93/bot-framework"
 )
 
-func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
-		msg := tgbotapi.NewMessage(bot.GetChatID(update), "Скачать макет листовки для печати")
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			// tgbotapi.NewInlineKeyboardRow(
-			// 	tgbotapi.NewInlineKeyboardButtonURL(
-			// 		"Взять листовки у координатора",
-			// 		"https://drive.google.com/drive/folders/1xBLVab1GJSrEaPR1bvXNjEIfacUi0rgh",
-			// 	),
-			// ),
+		user, err := users.Get(bot.GetChatID(update))
+		if err != nil {
+			return err
+		}
+
+		if user.CityID == 0 {
+			return SelectRegion(users, ticks, cities)(bot, update)
+		}
+
+		bot.RegisterLocationHandler(TickLocation(users, ticks), bot.GetChatID(update))
+
+		bot.RegisterCallbackQueryHandler(GetAPM(users, ticks), "apm_get_from_coordinator", bot.GetChatID(update))
+		bot.RegisterCallbackQueryHandler(StartDistributionAPM(users, ticks), "apm_start", bot.GetChatID(update))
+
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), "Ты можешь распечатать стикеры и листовки сам, а можешь взять уже готовые")
+		kb := tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonURL(
 					"Напечатать самому",
@@ -25,21 +33,57 @@ func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
 				),
 			),
 		)
+
+		if user.City.Coordinator != "" {
+			kb.InlineKeyboard = append(kb.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(
+					"Взять листовки у координатора",
+					"apm_get_from_coordinator",
+				),
+			),
+			)
+		}
+		kb.InlineKeyboard = append(kb.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Я начал раздавать",
+				"apm_start",
+			),
+		),
+		)
+
+		msg.ReplyMarkup = kb
+
 		if _, err := bot.Send(msg); err != nil {
 			return err
 		}
 
-		bot.RegisterLocationHandler(TickLocation(users, ticks), bot.GetChatID(update))
-		bot.RegisterPhotoHandler(TickPhoto(users, ticks), bot.GetChatID(update))
-		bot.RegisterCommand("❌ Отмена", Start(users, ticks), bot.GetChatID(update))
+		return nil
+	}
+}
 
-		text := "Отпраьте Location, где вы наклеили листовки и стикеры, а также фото для наших соцсетей"
-		msg = tgbotapi.NewMessage(bot.GetChatID(update), text)
+func GetAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		user, err := users.Get(bot.GetChatID(update))
+		if err != nil {
+			return err
+		}
+
+		text := "Напишите координатору @" + user.City.Coordinator
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
+
+		_, err = bot.Send(msg)
+		return err
+	}
+}
+
+func StartDistributionAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		text := "Отпраьте Location, где вы наклеили листовки и стикеры, чтобы отметить этот дом на карте"
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
 
 		kb := tgbotapi.NewReplyKeyboard(
 			tgbotapi.NewKeyboardButtonRow(
-				tgbotapi.NewKeyboardButtonLocation("Send Location"),
-				tgbotapi.NewKeyboardButton("❌ Отмена"),
+				tgbotapi.NewKeyboardButton("❌Отмена"),
 			),
 		)
 		kb.OneTimeKeyboard = true
@@ -59,7 +103,8 @@ func TickLocation(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandle
 		}
 
 		tick := &models.Tick{
-			User:      *user,
+			UserID:    user.ID,
+			CityID:    user.CityID,
 			Latitude:  update.Message.Location.Latitude,
 			Longitude: update.Message.Location.Longitude,
 		}
@@ -68,13 +113,41 @@ func TickLocation(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandle
 			return err
 		}
 
-		return nil
+		bot.RegisterPhotoHandler(TickPhoto(users, ticks, tick), bot.GetChatID(update))
+
+		text := "Отлично! Дом будет отмечен на карте! Теперь можете прислать фото наклеенной листовки или стикера для наших соцсетей"
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
+
+		_, err = bot.Send(msg)
+
+		return err
 	}
 }
 
-func TickPhoto(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func TickPhoto(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		photos := *update.Message.Photo
+		photo := photos[len(photos)-1]
 
-		return nil
+		url, err := bot.GetFileDirectURL(photo.FileID)
+		if err != nil {
+			return err
+		}
+
+		tick.Photo = url
+
+		if err := ticks.Save(tick); err != nil {
+			return err
+		}
+
+		fwd := tgbotapi.NewForward(-483425949, bot.GetChatID(update), update.Message.MessageID)
+		bot.Send(fwd)
+
+		text := "Отлично! Фото будет опубликовано в наших соцсетях.\nОтметьте ещё дома:"
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
+
+		_, err = bot.Send(msg)
+
+		return err
 	}
 }

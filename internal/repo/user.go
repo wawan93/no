@@ -36,3 +36,8 @@ func (r *UserRepo) IncrementPhotos(user *models.User) error {
 func (r *UserRepo) Update(user *models.User) error {
 	return r.db.Save(&user).Error
 }
+
+func (r *UserRepo) All() (users []models.User, err error) {
+	err = r.db.Preload("City").Find(&users).Error
+	return
+}

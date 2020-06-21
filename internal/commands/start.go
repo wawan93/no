@@ -11,7 +11,7 @@ import (
 
 func SelectRegion(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
-		if !update.Message.Chat.IsPrivate() {
+		if update.Message != nil && update.Message.Chat != nil && !update.Message.Chat.IsPrivate() {
 			msg := tgbotapi.NewMessage(bot.GetChatID(update), "Бот работает только в личке")
 			msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 				tgbotapi.NewInlineKeyboardRow(
@@ -25,15 +25,6 @@ func SelectRegion(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityR
 				log.Println(err)
 			}
 			return nil
-		}
-
-		user, err := users.Get(bot.GetChatID(update))
-		if err != nil {
-			return err
-		}
-
-		if user.CityID != 0 {
-			return Start(users, ticks)(bot, update)
 		}
 
 		bot.RegisterPlainTextHandler(SaveRegion(users, ticks, cities), bot.GetChatID(update))
@@ -100,10 +91,6 @@ func SaveCity(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo,
 			return err
 		}
 
-		if user.CityID != 0 {
-			return Start(users, ticks)(bot, update)
-		}
-
 		name := update.Message.Text
 		city, err := cities.Find(name, region)
 		if err != nil {
@@ -117,11 +104,11 @@ func SaveCity(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo,
 			return err
 		}
 
-		return Start(users, ticks)(bot, update)
+		return Start(users, ticks, cities)(bot, update)
 	}
 }
 
-func Start(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func Start(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 
 		_, err := users.Get(bot.GetChatID(update))
@@ -130,11 +117,12 @@ func Start(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
 		}
 
 		bot.RegisterCallbackQueryHandler(StartWatermark(users), "watermark", bot.GetChatID(update))
-		bot.RegisterCallbackQueryHandler(StartAPM(users, ticks), "apm", bot.GetChatID(update))
-		bot.RegisterCallbackQueryHandler(StartCoordinate, "coordinate", bot.GetChatID(update))
+		bot.RegisterCallbackQueryHandler(StartAPM(users, ticks, cities), "apm_main", bot.GetChatID(update))
+		bot.RegisterCallbackQueryHandler(StartCoordinate(users, ticks, cities), "coordinate", bot.GetChatID(update))
 
-		text := `TODO: Приветственный текст
-Задания:`
+		text := `Привет, я бот кампании «НЕТ»
+Я помогу тебе:
+`
 		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
@@ -145,8 +133,8 @@ func Start(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
 			),
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData(
-					"Расклеить листовки",
-					"apm",
+					"Расклеить стикеры и листовки",
+					"apm_main",
 				),
 			),
 			tgbotapi.NewInlineKeyboardRow(
@@ -161,6 +149,5 @@ func Start(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
 		}
 
 		return nil
-
 	}
 }

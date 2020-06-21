@@ -13,6 +13,7 @@ import (
 
 	"no/internal/commands"
 	"no/internal/db"
+	"no/internal/models"
 	"no/internal/repo"
 )
 
@@ -51,12 +52,27 @@ func main() {
 	ticks := repo.NewTickRepo(db.Conn)
 	cities := repo.NewCityRepo(db.Conn)
 
-	if err := bot.RegisterCommand("/start", commands.SelectRegion(users, ticks, cities), 0); err != nil {
+	bot.RegisterCommand("❌Отмена", commands.Start(users, ticks, cities), 0)
+
+	if err := bot.RegisterCommand("/start", commands.Start(users, ticks, cities), 0); err != nil {
 		log.Fatalf("can't register command: %+v", err)
 	}
 
 	if err := bot.RegisterPhotoHandler(commands.Watermark(users), 0); err != nil {
 		log.Fatalf("can't register handler: %+v", err)
+	}
+
+	if os.Getenv("APP_ENV") == "development" {
+		allUsers, err := users.All()
+		if err != nil {
+			log.Fatal("can't find all users")
+		}
+		for i := range allUsers {
+			go func(u *models.User) {
+				msg := tgbotapi.NewMessage(u.ChatID, "Бот перезагружен! Нажмите /start")
+				bot.Send(msg)
+			}(&allUsers[i])
+		}
 	}
 
 	updates := getUpdatesChannel(api, webhookAddress)
