@@ -19,6 +19,13 @@ func StartCoordinate(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.Ci
 			return SelectRegion(users, ticks, cities)(bot, update)
 		}
 
+		if user.City.Coordinator != "" {
+			replyMsg := tgbotapi.NewMessage(bot.GetChatID(update), "В вашем городе уже есть координатор @"+user.City.Coordinator)
+			_, err = bot.Send(replyMsg)
+			return err
+
+		}
+
 		text := fmt.Sprintf(
 			"[user](tg://user?id=%d) хочет стать координатором в %s, %s",
 			user.ChatID,
