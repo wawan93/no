@@ -48,8 +48,10 @@ func main() {
 	bot := tgbot.NewBotFramework(api)
 
 	users := repo.NewUserRepo(db.Conn)
+	ticks := repo.NewTickRepo(db.Conn)
+	cities := repo.NewCityRepo(db.Conn)
 
-	if err := bot.RegisterCommand("/start", commands.Start(users), 0); err != nil {
+	if err := bot.RegisterCommand("/start", commands.SelectRegion(users, ticks, cities), 0); err != nil {
 		log.Fatalf("can't register command: %+v", err)
 	}
 

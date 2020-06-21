@@ -35,5 +35,7 @@ func Mock() {
 func Migrate() {
 	Conn.AutoMigrate(
 		new(models.User),
+		new(models.Tick),
+		new(models.City),
 	)
 }

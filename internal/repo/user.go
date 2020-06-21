@@ -18,11 +18,21 @@ func NewUserRepo(db *gorm.DB) *UserRepo {
 
 func (r *UserRepo) Get(chatID int64) (*models.User, error) {
 	var user models.User
+	user.ChatID = chatID
 
-	err := r.db.Where("chat_id=?", user.ChatID).FirstOrCreate(&user).Error
+	err := r.db.
+		Preload("City").
+		Where("chat_id=?", chatID).
+		FirstOrCreate(&user).
+		Error
 	return &user, err
 }
+
 func (r *UserRepo) IncrementPhotos(user *models.User) error {
 	user.Photos++
+	return r.db.Save(&user).Error
+}
+
+func (r *UserRepo) Update(user *models.User) error {
 	return r.db.Save(&user).Error
 }
