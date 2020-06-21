@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -47,6 +48,14 @@ func main() {
 	log.Printf("logged in as %v", api.Self.UserName)
 
 	bot := tgbot.NewBotFramework(api)
+	bot.ErrorHandler = func(u tgbotapi.Update, err error) {
+		if bot.GetChatID(&u) > 0 {
+			text := fmt.Sprintf("Что-то пошло не так! Нажмите /start\n\n```\n%s\n```", err)
+			msg := tgbotapi.NewMessage(bot.GetChatID(&u), text)
+			msg.ParseMode = tgbotapi.ModeMarkdown
+			bot.Send(msg)
+		}
+	}
 
 	users := repo.NewUserRepo(db.Conn)
 	ticks := repo.NewTickRepo(db.Conn)
