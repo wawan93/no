@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"context"
 	"no/internal/models"
 	"no/internal/repo"
 	"strconv"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	tgbot "github.com/wawan93/bot-framework"
@@ -20,10 +22,8 @@ func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo)
 			return SelectRegion(users, ticks, cities)(bot, update)
 		}
 
-		bot.RegisterLocationHandler(TickLocation(users, ticks), bot.GetChatID(update))
-
 		bot.RegisterCallbackQueryHandler(GetAPM(users, ticks), "apm_get_from_coordinator", bot.GetChatID(update))
-		bot.RegisterCallbackQueryHandler(AskAPMCount(users, ticks), "apm_start", bot.GetChatID(update))
+		bot.RegisterCallbackQueryHandler(AskAPMCount(users, ticks, cities), "apm_start", bot.GetChatID(update))
 		bot.RegisterCallbackQueryHandler(SelectRegion(users, ticks, cities), "change_region", bot.GetChatID(update))
 
 		msg := tgbotapi.NewMessage(bot.GetChatID(update), "Ты можешь распечатать стикеры и листовки сам, а можешь взять уже готовые")
@@ -70,15 +70,15 @@ func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo)
 	}
 }
 
-func AskAPMCount(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func AskAPMCount(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		bot.Send(tgbotapi.NewMessage(bot.GetChatID(update), "Сколько материалов вы взяли (напечатали)"))
-		bot.RegisterPlainTextHandler(SaveAPMCount(users, ticks), bot.GetChatID(update))
+		bot.RegisterPlainTextHandler(SaveAPMCount(users, ticks, cities), bot.GetChatID(update))
 		return nil
 	}
 }
 
-func SaveAPMCount(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func SaveAPMCount(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		user, err := users.Get(bot.GetChatID(update))
 		if err != nil {
@@ -94,27 +94,41 @@ func SaveAPMCount(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandle
 		users.Update(user)
 
 		bot.Send(tgbotapi.NewMessage(bot.GetChatID(update), "Сохранено. Можете раздавать"))
-		return StartDistributionAPM(users, ticks)(bot, update)
+		return StartDistributionAPM(users, ticks, cities)(bot, update)
 	}
 }
 
-func GetAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func StartDistributionAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
-		user, err := users.Get(bot.GetChatID(update))
-		if err != nil {
-			return err
-		}
+		chatID := bot.GetChatID(update)
+		ctx, cancel := context.WithCancel(context.Background())
 
-		text := "Напишите координатору @" + user.City.Coordinator
-		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
+		bot.RegisterCommand("❌Отмена", func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+			cancel()
+			return Start(users, ticks, cities)(bot, update)
+		}, chatID)
 
-		_, err = bot.Send(msg)
-		return err
-	}
-}
+		resetCh := make(chan struct{})
 
-func StartDistributionAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
-	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		go func() {
+			for {
+				timeout := time.After(15 * time.Minute)
+				select {
+				case <-ctx.Done():
+					break
+				case <-resetCh:
+					continue
+				case <-timeout:
+					bot.Send(tgbotapi.NewMessage(
+						chatID,
+						"Вы расклеиваете уже 15 минут. Пожалуйста, скиньте location и фото!",
+					))
+				}
+			}
+		}()
+
+		bot.RegisterLocationHandler(TickLocation(users, ticks, resetCh), bot.GetChatID(update))
+
 		text := "Отпраьте Location, где вы наклеили листовки и стикеры, чтобы отметить этот дом на карте"
 		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
 
@@ -132,7 +146,7 @@ func StartDistributionAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.Comm
 	}
 }
 
-func TickLocation(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+func TickLocation(users *repo.UserRepo, ticks *repo.TickRepo, resetCh chan struct{}) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		user, err := users.Get(bot.GetChatID(update))
 		if err != nil {
@@ -150,7 +164,9 @@ func TickLocation(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandle
 			return err
 		}
 
-		bot.RegisterPhotoHandler(TickPhoto(users, ticks, tick), bot.GetChatID(update))
+		resetCh <- struct{}{}
+
+		bot.RegisterPhotoHandler(TickPhoto(users, ticks, tick, resetCh), bot.GetChatID(update))
 
 		text := "Отлично! Дом будет отмечен на карте! Теперь можете прислать фото наклеенной листовки или стикера для наших соцсетей"
 		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
@@ -161,7 +177,7 @@ func TickLocation(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandle
 	}
 }
 
-func TickPhoto(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick) tgbot.CommonHandler {
+func TickPhoto(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick, resetCh chan struct{}) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		photos := *update.Message.Photo
 		photo := photos[len(photos)-1]
@@ -187,7 +203,9 @@ func TickPhoto(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick) tg
 			return err
 		}
 
-		bot.RegisterPlainTextHandler(TickCount(users, ticks, tick), bot.GetChatID(update))
+		resetCh <- struct{}{}
+
+		bot.RegisterPlainTextHandler(TickCount(users, ticks, tick, resetCh), bot.GetChatID(update))
 
 		text = "Отметьте, сколько вы расклеили"
 		msg = tgbotapi.NewMessage(bot.GetChatID(update), text)
@@ -196,7 +214,7 @@ func TickPhoto(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick) tg
 	}
 }
 
-func TickCount(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick) tgbot.CommonHandler {
+func TickCount(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick, resetCh chan struct{}) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
 		materials, err := strconv.Atoi(update.Message.Text)
 		if err != nil {
@@ -215,8 +233,25 @@ func TickCount(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick) tg
 			return err
 		}
 
+		resetCh <- struct{}{}
+
 		text = "Отпраьте Location, где вы наклеили листовки и стикеры, чтобы отметить этот дом на карте"
 		msg = tgbotapi.NewMessage(bot.GetChatID(update), text)
+		_, err = bot.Send(msg)
+		return err
+	}
+}
+
+func GetAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
+	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		user, err := users.Get(bot.GetChatID(update))
+		if err != nil {
+			return err
+		}
+
+		text := "Напишите координатору @" + user.City.Coordinator
+		msg := tgbotapi.NewMessage(bot.GetChatID(update), text)
+
 		_, err = bot.Send(msg)
 		return err
 	}
