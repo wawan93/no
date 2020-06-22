@@ -11,6 +11,9 @@ import (
 
 func SelectRegion(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		bot.AnswerCallbackQuery(tgbotapi.CallbackConfig{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
 		if update.Message != nil && update.Message.Chat != nil && !update.Message.Chat.IsPrivate() {
 			msg := tgbotapi.NewMessage(bot.GetChatID(update), "Бот работает только в личке")
 			msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(

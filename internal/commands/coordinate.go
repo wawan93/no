@@ -10,6 +10,9 @@ import (
 
 func StartCoordinate(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		bot.AnswerCallbackQuery(tgbotapi.CallbackConfig{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
 		user, err := users.Get(bot.GetChatID(update))
 		if err != nil {
 			return err

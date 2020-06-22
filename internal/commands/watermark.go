@@ -12,6 +12,9 @@ import (
 
 func StartWatermark(users *repo.UserRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		bot.AnswerCallbackQuery(tgbotapi.CallbackConfig{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
 		photosCfg := tgbotapi.NewUserProfilePhotos(int(bot.GetChatID(update)))
 
 		photos, err := bot.BotAPI.GetUserProfilePhotos(photosCfg)

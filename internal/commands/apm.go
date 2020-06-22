@@ -13,6 +13,9 @@ import (
 
 func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		bot.AnswerCallbackQuery(tgbotapi.CallbackConfig{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
 		user, err := users.Get(bot.GetChatID(update))
 		if err != nil {
 			return err
@@ -72,6 +75,9 @@ func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo)
 
 func AskAPMCount(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		bot.AnswerCallbackQuery(tgbotapi.CallbackConfig{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
 		bot.Send(tgbotapi.NewMessage(bot.GetChatID(update), "Сколько материалов вы взяли (напечатали)"))
 		bot.RegisterPlainTextHandler(SaveAPMCount(users, ticks, cities), bot.GetChatID(update))
 		return nil
@@ -244,6 +250,9 @@ func TickCount(users *repo.UserRepo, ticks *repo.TickRepo, tick *models.Tick, re
 
 func GetAPM(users *repo.UserRepo, ticks *repo.TickRepo) tgbot.CommonHandler {
 	return func(bot *tgbot.BotFramework, update *tgbotapi.Update) error {
+		bot.AnswerCallbackQuery(tgbotapi.CallbackConfig{
+			CallbackQueryID: update.CallbackQuery.ID,
+		})
 		user, err := users.Get(bot.GetChatID(update))
 		if err != nil {
 			return err
