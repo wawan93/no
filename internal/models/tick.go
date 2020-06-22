@@ -13,4 +13,5 @@ type Tick struct {
 	CityID    uint
 	User      User `gorm:"foreignkey:UserID;association_autoupdate:false;association_autocreate:false;association_save_reference:false"`
 	City      City `gorm:"foreignkey:CityID;association_autoupdate:false;association_autocreate:false;association_save_reference:false"`
+	Materials uint
 }
