@@ -24,6 +24,7 @@ func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo)
 
 		bot.RegisterCallbackQueryHandler(GetAPM(users, ticks), "apm_get_from_coordinator", bot.GetChatID(update))
 		bot.RegisterCallbackQueryHandler(AskAPMCount(users, ticks), "apm_start", bot.GetChatID(update))
+		bot.RegisterCallbackQueryHandler(SelectRegion(users, ticks, cities), "change_region", bot.GetChatID(update))
 
 		msg := tgbotapi.NewMessage(bot.GetChatID(update), "Ты можешь распечатать стикеры и листовки сам, а можешь взять уже готовые")
 		kb := tgbotapi.NewInlineKeyboardMarkup(
@@ -48,6 +49,13 @@ func StartAPM(users *repo.UserRepo, ticks *repo.TickRepo, cities *repo.CityRepo)
 			tgbotapi.NewInlineKeyboardButtonData(
 				"Я начал раздавать",
 				"apm_start",
+			),
+		),
+		)
+		kb.InlineKeyboard = append(kb.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(
+				"Сменить район",
+				"change_region",
 			),
 		),
 		)
